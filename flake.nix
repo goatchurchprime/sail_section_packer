@@ -29,7 +29,7 @@
         in
           pkgs.mkShell {
             buildInputs = with pkgs.python39Packages; [
-              jupyter scipy matplotlib pandas matplotlib sympy ezdxf nurbs
+              jupyter scipy matplotlib pandas matplotlib sympy ezdxf
             ];
           }
       );
