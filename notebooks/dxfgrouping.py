@@ -227,7 +227,11 @@ def dxfoutputblocks(outputfilename, elementgroups):
         blockname = blockbasename+str(i)
         block = doc.blocks.new(name=blockname)
 
-        addelementstoblock(block, aamacutlayer, outercutelements, outercutelementsdir)
+        ptsseq = cutcontouraspoly(outercutelements, outercutelementsdir)
+        ptsseq.append(ptsseq[0])
+        block.add_polyline2d(ptsseq, dxfattribs={ "layer":aamacutlayer.dxf.name })
+        #addelementstoblock(block, aamacutlayer, outercutelements, outercutelementsdir)
+
         addelementstoblock(block, aamaintcutlayer, internalcutelements)
         addelementstoblock(block, aamadrawlayer, internalpenelements)
 
