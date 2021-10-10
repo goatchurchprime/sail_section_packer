@@ -15,6 +15,10 @@ def linearizeelement(e):
         segments = 5
         angs = [ e.dxf.start_angle*(1-i/segments) + e.dxf.end_angle*(i/segments)  for i in range(segments+1) ]
         return [ e.dxf.center + ezdxf.math.vector.Vector.from_deg_angle(a, e.dxf.radius)  for a in angs]
+    elif e.dxftype() == "CIRCLE":
+        segments = 20
+        angs = [ 360.0*i/segments  for i in range(segments+1) ]
+        return [ e.dxf.center + ezdxf.math.vector.Vector.from_deg_angle(a, e.dxf.radius)  for a in angs]
     elif e.dxftype() == "SPLINE":
         s = ezdxf.math.BSpline(e.control_points, e.dxfattribs()["degree"]+1, e.knots, e.weights or None)
         return list(s.approximate(20))
@@ -197,6 +201,9 @@ def addelementstoblock(block, layer, elements, elementsdir=None):
                 block.add_arc(e.dxf.center, e.dxf.radius, e.dxf.start_angle, e.dxf.end_angle, dxfattribs=dxfattribs)
             else:
                 block.add_arc(e.dxf.center, e.dxf.radius, e.dxf.end_angle, e.dxf.start_angle, dxfattribs=dxfattribs)
+        elif e.dxftype() == "CIRCLE":
+            assert bfore
+            block.add_circle(e.dxf.center, e.dxf.radius, dxfattribs=dxfattribs)
         elif e.dxftype() == "SPLINE":
             pts = linearizeelement(e)
             if not bfore:
