@@ -6,21 +6,25 @@ AAMA_DRAW = "8"
 AAMA_INTCUT = "11"
 
 def filterlayerelements(d, layernames):
-    return [ e  for e in d.entities  if (e.dxf.layer in layernames) ]
+    return [ e  for e in d.entities  if (e.dxf.layer in layernames) and (e.dxftype() not in ["MTEXT", "INSERT"]) ]
 
 def linearizeelement(e):
     if e.dxftype() == "LINE":
         return [e.dxf.start, e.dxf.end]
     elif e.dxftype() == "ARC":
-        segments = 5
-        angs = [ e.dxf.start_angle*(1-i/segments) + e.dxf.end_angle*(i/segments)  for i in range(segments+1) ]
+        segments = 15
+        endangle = e.dxf.end_angle
+        if 0 < endangle + 360 - e.dxf.start_angle < 180:
+            endangle += 360
+        angs = [ e.dxf.start_angle*(1-i/segments) + endangle*(i/segments)  for i in range(segments+1) ]
         return [ e.dxf.center + ezdxf.math.vector.Vector.from_deg_angle(a, e.dxf.radius)  for a in angs]
     elif e.dxftype() == "CIRCLE":
         segments = 20
         angs = [ 360.0*i/segments  for i in range(segments+1) ]
         return [ e.dxf.center + ezdxf.math.vector.Vector.from_deg_angle(a, e.dxf.radius)  for a in angs]
     elif e.dxftype() == "SPLINE":
-        s = ezdxf.math.BSpline(e.control_points, e.dxfattribs()["degree"]+1, e.knots, e.weights or None)
+        knots = [ k-e.knots[0]  for k in e.knots ]
+        s = ezdxf.math.BSpline(e.control_points, e.dxfattribs()["degree"]+1, knots, e.weights or None)
         return list(s.approximate(20))
     else:
         print("Unknown type")
@@ -90,7 +94,8 @@ def makemergevertset(cutelements, dmax):
                 mvdists.append((v.magnitude, mergeverts[i], mergeverts[j]))
                 dmaxs.append(v.magnitude)
     mvdists.sort(key=lambda X:X[0])
-    print("dmaxs-tail: ", sorted(dmaxs)[-3:])
+    if max(dmaxs) > 0.01:
+        print("dmaxs-tail: ", sorted(dmaxs)[-3:])
     
     smergeverts = set(mergeverts)
     for i in range(len(mvdists)):
@@ -105,7 +110,7 @@ def makemergevertset(cutelements, dmax):
         else:
             pass # print("already merged ", mv0.pt)
 
-    print("vertdegs:", [len(mv.mergeedges)  for mv in smergeverts])
+    #print("vertdegs:", [len(mv.mergeedges)  for mv in smergeverts])
     for mv in smergeverts:
         mv.mergeedges.sort(key=lambda X: X.angout)
         
@@ -200,6 +205,7 @@ def addelementstoblock(block, layer, elements, elementsdir=None):
             if bfore:
                 block.add_arc(e.dxf.center, e.dxf.radius, e.dxf.start_angle, e.dxf.end_angle, dxfattribs=dxfattribs)
             else:
+                assert False, "cannot change direction of arc"
                 block.add_arc(e.dxf.center, e.dxf.radius, e.dxf.end_angle, e.dxf.start_angle, dxfattribs=dxfattribs)
         elif e.dxftype() == "CIRCLE":
             assert bfore
@@ -213,8 +219,40 @@ def addelementstoblock(block, layer, elements, elementsdir=None):
             print("Unknown type", e)
             #block.add_foreign_entity(e)
 
+def reflvecY(pt):
+    return ezdxf.math.vector.Vector(pt.x, -pt.y, pt.z)
+
+def addelementstoblockReflY(block, layer, elements, elementsdir=None):
+    if not elementsdir:
+        elementsdir = [ True ]*len(elements)
+    for e, bfore in zip(elements, elementsdir):
+        dxfattribs = { "layer":layer.dxf.name }
+        if e.dxftype() == "LINE":
+            if bfore:
+                block.add_line(reflvecY(e.dxf.start), reflvecY(e.dxf.end), dxfattribs=dxfattribs)
+            else:
+                block.add_line(reflvecY(e.dxf.end), reflvecY(e.dxf.start), dxfattribs=dxfattribs)
+        elif e.dxftype() == "ARC":
+            if bfore:
+                block.add_arc(reflvecY(e.dxf.center), e.dxf.radius, 360-e.dxf.end_angle, 360-e.dxf.start_angle, dxfattribs=dxfattribs)
+            else:
+                block.add_arc(reflvecY(e.dxf.center), e.dxf.radius, 360-e.dxf.start_angle, 360-e.dxf.end_angle, dxfattribs=dxfattribs)
+        elif e.dxftype() == "CIRCLE":
+            assert bfore
+            block.add_circle(reflvecY(e.dxf.center), e.dxf.radius, dxfattribs=dxfattribs)
+        elif e.dxftype() == "SPLINE":
+            pts = linearizeelement(e)
+            if not bfore:
+                pts.reverse()
+            pts = [ reflvecY(pt)  for pt in pts ]
+            block.add_polyline2d(pts, dxfattribs=dxfattribs)
+        else:
+            print("Unknown type", e)
+            #block.add_foreign_entity(e)
+
+            
 import os
-def dxfoutputblocks(outputfilename, elementgroups):
+def dxfoutputblocks(outputfilename, elementgroups, breflY=False):
     blockbasename = os.path.splitext(os.path.split(outputfilename)[1])[0]
 
     doc = ezdxf.new('R12')
@@ -229,11 +267,17 @@ def dxfoutputblocks(outputfilename, elementgroups):
 
         ptsseq = cutcontouraspoly(outercutelements, outercutelementsdir)
         ptsseq.append(ptsseq[0])
+        if breflY:
+            ptsseq = [ reflvecY(pt)  for pt in ptsseq ]
         block.add_polyline2d(ptsseq, dxfattribs={ "layer":aamacutlayer.dxf.name })
         #addelementstoblock(block, aamacutlayer, outercutelements, outercutelementsdir)
 
-        addelementstoblock(block, aamaintcutlayer, internalcutelements)
-        addelementstoblock(block, aamadrawlayer, internalpenelements)
+        if breflY:
+            addelementstoblockReflY(block, aamaintcutlayer, internalcutelements)
+            addelementstoblockReflY(block, aamadrawlayer, internalpenelements)
+        else:
+            addelementstoblock(block, aamaintcutlayer, internalcutelements)
+            addelementstoblock(block, aamadrawlayer, internalpenelements)
 
         msp = doc.modelspace()
         dxfattribs = {'rotation': 0, 'linetype':'BYLAYER' }
