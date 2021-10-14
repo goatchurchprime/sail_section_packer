@@ -191,30 +191,30 @@ def getblockcomponent(cutelements, penelements, dmax):
     return (outercutelements, outercutelementsdir), (internalcutelements, internalpenelements), (remainingcutelements, remainingpenelements)
 
 
-def addelementstoblock(block, layer, elements, elementsdir=None):
+def addelementstoblock(block, offset, layer, elements, elementsdir=None):
     if not elementsdir:
         elementsdir = [ True ]*len(elements)
     for e, bfore in zip(elements, elementsdir):
         dxfattribs = { "layer":layer.dxf.name }
         if e.dxftype() == "LINE":
             if bfore:
-                block.add_line(e.dxf.start, e.dxf.end, dxfattribs=dxfattribs)
+                block.add_line(e.dxf.start+offset, e.dxf.end+offset, dxfattribs=dxfattribs)
             else:
-                block.add_line(e.dxf.end, e.dxf.start, dxfattribs=dxfattribs)
+                block.add_line(e.dxf.end+offset, e.dxf.start+offset, dxfattribs=dxfattribs)
         elif e.dxftype() == "ARC":
             if bfore:
-                block.add_arc(e.dxf.center, e.dxf.radius, e.dxf.start_angle, e.dxf.end_angle, dxfattribs=dxfattribs)
+                block.add_arc(e.dxf.center+offset, e.dxf.radius, e.dxf.start_angle, e.dxf.end_angle, dxfattribs=dxfattribs)
             else:
                 assert False, "cannot change direction of arc"
-                block.add_arc(e.dxf.center, e.dxf.radius, e.dxf.end_angle, e.dxf.start_angle, dxfattribs=dxfattribs)
+                block.add_arc(e.dxf.center+offset, e.dxf.radius, e.dxf.end_angle, e.dxf.start_angle, dxfattribs=dxfattribs)
         elif e.dxftype() == "CIRCLE":
             assert bfore
-            block.add_circle(e.dxf.center, e.dxf.radius, dxfattribs=dxfattribs)
+            block.add_circle(e.dxf.center+offset, e.dxf.radius, dxfattribs=dxfattribs)
         elif e.dxftype() == "SPLINE":
             pts = linearizeelement(e)
             if not bfore:
                 pts.reverse()
-            block.add_polyline2d(pts, dxfattribs=dxfattribs)
+            block.add_polyline2d([p+offset  for p in pts], dxfattribs=dxfattribs)
         else:
             print("Unknown type", e)
             #block.add_foreign_entity(e)
@@ -222,29 +222,29 @@ def addelementstoblock(block, layer, elements, elementsdir=None):
 def reflvecY(pt):
     return ezdxf.math.vector.Vector(pt.x, -pt.y, pt.z)
 
-def addelementstoblockReflY(block, layer, elements, elementsdir=None):
+def addelementstoblockReflY(block, offset, layer, elements, elementsdir=None):
     if not elementsdir:
         elementsdir = [ True ]*len(elements)
     for e, bfore in zip(elements, elementsdir):
         dxfattribs = { "layer":layer.dxf.name }
         if e.dxftype() == "LINE":
             if bfore:
-                block.add_line(reflvecY(e.dxf.start), reflvecY(e.dxf.end), dxfattribs=dxfattribs)
+                block.add_line(reflvecY(e.dxf.start)+offset, reflvecY(e.dxf.end)+offset, dxfattribs=dxfattribs)
             else:
-                block.add_line(reflvecY(e.dxf.end), reflvecY(e.dxf.start), dxfattribs=dxfattribs)
+                block.add_line(reflvecY(e.dxf.end)+offset, reflvecY(e.dxf.start)+offset, dxfattribs=dxfattribs)
         elif e.dxftype() == "ARC":
             if bfore:
-                block.add_arc(reflvecY(e.dxf.center), e.dxf.radius, 360-e.dxf.end_angle, 360-e.dxf.start_angle, dxfattribs=dxfattribs)
+                block.add_arc(reflvecY(e.dxf.center)+offset, e.dxf.radius, 360-e.dxf.end_angle, 360-e.dxf.start_angle, dxfattribs=dxfattribs)
             else:
-                block.add_arc(reflvecY(e.dxf.center), e.dxf.radius, 360-e.dxf.start_angle, 360-e.dxf.end_angle, dxfattribs=dxfattribs)
+                block.add_arc(reflvecY(e.dxf.center)+offset, e.dxf.radius, 360-e.dxf.start_angle, 360-e.dxf.end_angle, dxfattribs=dxfattribs)
         elif e.dxftype() == "CIRCLE":
             assert bfore
-            block.add_circle(reflvecY(e.dxf.center), e.dxf.radius, dxfattribs=dxfattribs)
+            block.add_circle(reflvecY(e.dxf.center)+offset, e.dxf.radius, dxfattribs=dxfattribs)
         elif e.dxftype() == "SPLINE":
             pts = linearizeelement(e)
             if not bfore:
                 pts.reverse()
-            pts = [ reflvecY(pt)  for pt in pts ]
+            pts = [ reflvecY(pt)+offset  for pt in pts ]
             block.add_polyline2d(pts, dxfattribs=dxfattribs)
         else:
             print("Unknown type", e)
@@ -269,19 +269,22 @@ def dxfoutputblocks(outputfilename, elementgroups, breflY=False):
         ptsseq.append(ptsseq[0])
         if breflY:
             ptsseq = [ reflvecY(pt)  for pt in ptsseq ]
-        block.add_polyline2d(ptsseq, dxfattribs={ "layer":aamacutlayer.dxf.name })
+        contourcentre = ezdxf.math.vector.Vector((min(p.x  for p in ptsseq) + max(p.x  for p in ptsseq))/2, 
+                                                 (min(p.y  for p in ptsseq) + max(p.y  for p in ptsseq))/2, 0)
+        cptsseq = [ pt - contourcentre  for pt in ptsseq ]
+        block.add_polyline2d(cptsseq, dxfattribs={ "layer":aamacutlayer.dxf.name })
         #addelementstoblock(block, aamacutlayer, outercutelements, outercutelementsdir)
 
         if breflY:
-            addelementstoblockReflY(block, aamaintcutlayer, internalcutelements)
-            addelementstoblockReflY(block, aamadrawlayer, internalpenelements)
+            addelementstoblockReflY(block, -contourcentre, aamaintcutlayer, internalcutelements)
+            addelementstoblockReflY(block, -contourcentre, aamadrawlayer, internalpenelements)
         else:
-            addelementstoblock(block, aamaintcutlayer, internalcutelements)
-            addelementstoblock(block, aamadrawlayer, internalpenelements)
+            addelementstoblock(block, -contourcentre, aamaintcutlayer, internalcutelements)
+            addelementstoblock(block, -contourcentre, aamadrawlayer, internalpenelements)
 
         msp = doc.modelspace()
         dxfattribs = {'rotation': 0, 'linetype':'BYLAYER' }
-        k = msp.add_blockref(blockname, (0, 0, 0), dxfattribs=dxfattribs)
+        k = msp.add_blockref(blockname, contourcentre, dxfattribs=dxfattribs)
         
     doc.set_modelspace_vport(height=2300, center=(1800, 900))
     doc.saveas(outputfilename)
