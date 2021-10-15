@@ -11,6 +11,8 @@ def filterlayerelements(d, layernames):
 def linearizeelement(e):
     if e.dxftype() == "LINE":
         return [e.dxf.start, e.dxf.end]
+    elif e.dxftype() == "POLYLINE":
+        return [ p.dxf.location  for p in e.vertices ]
     elif e.dxftype() == "ARC":
         segments = 15
         endangle = e.dxf.end_angle
@@ -27,7 +29,7 @@ def linearizeelement(e):
         s = ezdxf.math.BSpline(e.control_points, e.dxfattribs()["degree"]+1, knots, e.weights or None)
         return list(s.approximate(20))
     else:
-        print("Unknown type")
+        print("Unknown type ", e.dxftype())
 
 
 class MergeEdge:

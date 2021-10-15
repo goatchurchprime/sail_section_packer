@@ -1,12 +1,9 @@
-[gd_scene load_steps=5 format=2]
+[gd_scene load_steps=4 format=2]
 
 [ext_resource path="res://Node2D.gd" type="Script" id=1]
 
 [sub_resource type="RectangleShape2D" id=1]
 extents = Vector2( 300, 400 )
-
-[sub_resource type="RectangleShape2D" id=2]
-extents = Vector2( 30, 40 )
 
 [sub_resource type="RectangleShape2D" id=4]
 extents = Vector2( 5000, 10 )
@@ -28,16 +25,15 @@ __meta__ = {
 
 [node name="CollisionPolygon2D" type="CollisionPolygon2D" parent="StaticBody2D"]
 build_mode = 1
-polygon = PoolVector2Array( 3000, 0, 0, 0, 0, 1800, 3000, 1800, 3000, 1900, -100, 1900, -100, -100, 3000, -100 )
+polygon = PoolVector2Array( 0, 0, 0, 1800, 3000, 1800, 3000, 1900, -100, 1900, -100, 0 )
 
 [node name="sailpanels" type="Node2D" parent="."]
 
 [node name="RigidBody2D" type="RigidBody2D" parent="."]
 position = Vector2( 3838.8, 740.126 )
 input_pickable = true
-linear_velocity = Vector2( -200, 0 )
 linear_damp = 0.0
-angular_velocity = -5.0
+angular_velocity = -1.0
 angular_damp = 0.0
 
 [node name="CollisionShape2D" type="CollisionShape2D" parent="RigidBody2D"]
@@ -48,26 +44,6 @@ margin_left = -300.0
 margin_top = -400.0
 margin_right = 300.0
 margin_bottom = 400.0
-__meta__ = {
-"_edit_use_anchors_": false
-}
-
-[node name="RigidBody2D2" type="RigidBody2D" parent="."]
-position = Vector2( 3838.8, 20 )
-input_pickable = true
-mode = 2
-linear_velocity = Vector2( -200, 0 )
-linear_damp = 0.0
-angular_damp = 0.0
-
-[node name="CollisionShape2D" type="CollisionShape2D" parent="RigidBody2D2"]
-shape = SubResource( 2 )
-
-[node name="ColorRect" type="ColorRect" parent="RigidBody2D2"]
-margin_left = -30.0
-margin_top = -40.0
-margin_right = 30.0
-margin_bottom = 40.0
 __meta__ = {
 "_edit_use_anchors_": false
 }
@@ -86,7 +62,28 @@ __meta__ = {
 }
 
 [node name="StaticBodyFloor" type="StaticBody2D" parent="."]
-position = Vector2( 1642.94, 2348.49 )
+position = Vector2( 1642.94, 2852.46 )
 
 [node name="CollisionShape2D" type="CollisionShape2D" parent="StaticBodyFloor"]
 shape = SubResource( 4 )
+
+[node name="CanvasLayer" type="CanvasLayer" parent="."]
+
+[node name="Control" type="Control" parent="CanvasLayer"]
+margin_right = 40.0
+margin_bottom = 40.0
+__meta__ = {
+"_edit_use_anchors_": false
+}
+
+[node name="SavePositions" type="Button" parent="CanvasLayer/Control"]
+margin_left = 94.2059
+margin_top = 35.137
+margin_right = 158.206
+margin_bottom = 55.137
+text = "Save Positions"
+__meta__ = {
+"_edit_use_anchors_": false
+}
+
+[connection signal="button_down" from="CanvasLayer/Control/SavePositions" to="." method="_on_SavePositions_button_down"]
