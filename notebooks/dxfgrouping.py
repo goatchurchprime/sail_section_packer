@@ -19,11 +19,11 @@ def linearizeelement(e):
         if 0 < endangle + 360 - e.dxf.start_angle < 180:
             endangle += 360
         angs = [ e.dxf.start_angle*(1-i/segments) + endangle*(i/segments)  for i in range(segments+1) ]
-        return [ e.dxf.center + ezdxf.math.vector.Vector.from_deg_angle(a, e.dxf.radius)  for a in angs]
+        return [ e.dxf.center + ezdxf.math.Vec3.from_deg_angle(a, e.dxf.radius)  for a in angs]
     elif e.dxftype() == "CIRCLE":
         segments = 20
         angs = [ 360.0*i/segments  for i in range(segments+1) ]
-        return [ e.dxf.center + ezdxf.math.vector.Vector.from_deg_angle(a, e.dxf.radius)  for a in angs]
+        return [ e.dxf.center + ezdxf.math.Vec3.from_deg_angle(a, e.dxf.radius)  for a in angs]
     elif e.dxftype() == "SPLINE":
         knots = [ k-e.knots[0]  for k in e.knots ]
         s = ezdxf.math.BSpline(e.control_points, e.dxfattribs()["degree"]+1, knots, e.weights or None)
@@ -79,14 +79,13 @@ def ultimatesuccessor(mv):
         mv = mv.successormv
     return mv
 
-def makemergevertset(cutelements, dmax):
+def makemergevertset(cutelements, dmax, bverbose):
     mergeverts = [ ]
     for e in cutelements:
             mergeverts.extend(MergeVertBiway(e))
     mergeverts.sort(key=lambda X: X.pt.x)
 
     mvdists = [ ]
-    dmaxs = [ ]
     for i in range(len(mergeverts)):
         for j in range(i+1, len(mergeverts)):
             v = mergeverts[j].pt - mergeverts[i].pt
@@ -94,10 +93,10 @@ def makemergevertset(cutelements, dmax):
                 break
             if v.magnitude < dmax:
                 mvdists.append((v.magnitude, mergeverts[i], mergeverts[j]))
-                dmaxs.append(v.magnitude)
     mvdists.sort(key=lambda X:X[0])
-    if max(dmaxs) > 0.01:
-        print("dmaxs-tail: ", sorted(dmaxs)[-3:])
+    if bverbose and mvdists:
+        mvdistsmax = max(mvdists, key=lambda X: X[0])
+        print("Biggest accepted point gap is %f at (%.3f, %.3f)" % (mvdistsmax[0], mvdistsmax[1].pt.x, mvdistsmax[1].pt.y))
     
     smergeverts = set(mergeverts)
     for i in range(len(mvdists)):
@@ -119,8 +118,8 @@ def makemergevertset(cutelements, dmax):
     return smergeverts
 
 
-def findcutelementsouter(cutelements, dmax):
-    smergeverts = makemergevertset(cutelements, 0.999)
+def findcutelementsouter(cutelements, dmax, bverbose):
+    smergeverts = makemergevertset(cutelements, dmax, bverbose)
 
     mvTL = min(smergeverts, key=lambda X: X.pt.x-X.pt.y)
     meTL = max(mvTL.mergeedges, key=lambda X: (X.angout+360-135)%360)
@@ -167,8 +166,8 @@ def windingnumber(p, ptsseq):
     return wn
 
 
-def getblockcomponent(cutelements, penelements, dmax):
-    outercutelements, outercutelementsdir = findcutelementsouter(cutelements, dmax)
+def getblockcomponent(cutelements, penelements, dmax, bverbose=False):
+    outercutelements, outercutelementsdir = findcutelementsouter(cutelements, dmax, bverbose)
     ptsseq = cutcontouraspoly(outercutelements, outercutelementsdir)
 
     internalcutelements = [ ]
@@ -222,7 +221,7 @@ def addelementstoblock(block, offset, layer, elements, elementsdir=None):
             #block.add_foreign_entity(e)
 
 def reflvecY(pt):
-    return ezdxf.math.vector.Vector(pt.x, -pt.y, pt.z)
+    return ezdxf.math.Vec3(pt.x, -pt.y, pt.z)
 
 def addelementstoblockReflY(block, offset, layer, elements, elementsdir=None):
     if not elementsdir:
@@ -271,8 +270,8 @@ def dxfoutputblocks(outputfilename, elementgroups, breflY=False):
         ptsseq.append(ptsseq[0])
         if breflY:
             ptsseq = [ reflvecY(pt)  for pt in ptsseq ]
-        contourcentre = ezdxf.math.vector.Vector((min(p.x  for p in ptsseq) + max(p.x  for p in ptsseq))/2, 
-                                                 (min(p.y  for p in ptsseq) + max(p.y  for p in ptsseq))/2, 0)
+        contourcentre = ezdxf.math.Vec3((min(p.x  for p in ptsseq) + max(p.x  for p in ptsseq))/2, 
+                                        (min(p.y  for p in ptsseq) + max(p.y  for p in ptsseq))/2, 0)
         cptsseq = [ pt - contourcentre  for pt in ptsseq ]
         block.add_polyline2d(cptsseq, dxfattribs={ "layer":aamacutlayer.dxf.name })
         #addelementstoblock(block, aamacutlayer, outercutelements, outercutelementsdir)
@@ -290,3 +289,63 @@ def dxfoutputblocks(outputfilename, elementgroups, breflY=False):
         
     doc.set_modelspace_vport(height=2300, center=(1800, 900))
     doc.saveas(outputfilename)
+
+
+if __name__ == "__main__":
+    import optparse, sys
+    parser = optparse.OptionParser()
+    parser.add_option("-i", "--input", dest="inputfilename", help="input DXF file", metavar="FILE")
+    parser.add_option("-o", "--output", dest="outputfilename", help="output DXF file", metavar="FILE")
+    parser.add_option("-c", "--cut-layer", action="append", dest="cutlayers", help="Cut layer name", metavar="LAYERNAME")
+    parser.add_option("-p", "--pen-layer", action="append", dest="penlayers", help="Pen layer name", metavar="LAYERNAME")
+    parser.add_option("-d", "--distance-max", type="float", dest="dmax", default=0.5, help="output DXF file", metavar="FLOAT")
+    parser.add_option("-y", "--reflect-y", action="store_true", dest="reflectY", default=False, help="reflect in Y-axis")
+    parser.add_option("-q", "--quiet", action="store_false", dest="verbose", default=True, help="don't print debug messages")
+    (options, args) = parser.parse_args()
+    if not options.inputfilename or not options.outputfilename or not options.cutlayers:
+        parser.print_help()
+        sys.exit(0)
+
+    
+    d = ezdxf.readfile(options.inputfilename)
+
+    layerspresent = set(e.dxf.layer for e in d.entities)
+    if options.verbose:
+        print("layerspresent:", ", ".join(sorted(list(layerspresent))))
+    overlappinglayers = set(options.cutlayers).intersection(options.penlayers)
+    if overlappinglayers:
+        print("\n** Error: layers %s in pen and cut" % ", ".join(sorted(list(overlappinglayers))))
+        sys.exit(0)
+    for layername in options.cutlayers+options.penlayers:
+        if layername not in layerspresent:
+            print("\n** Error: layer %s not present in dxf file" % layername)
+            sys.exit(0)
+              
+    lwpolylines = [ e  for e in d.entities  if e.dxftype() == "LWPOLYLINE" ]
+    if lwpolylines:
+        #print("exploding %d lwpolylines" % len(lwpolylines))
+        for e in lwpolylines:
+            e.explode()
+
+    cutelements = filterlayerelements(d, options.cutlayers)
+    penelements = filterlayerelements(d, options.penlayers)
+        
+    lcutelements, lpenelements = cutelements, penelements
+    elementgroups = [ ]
+
+    gapverbose = options.verbose
+    while lcutelements:
+        res = getblockcomponent(lcutelements, lpenelements, options.dmax, gapverbose)
+        (outercutelements, outercutelementsdir) = res[0]
+        (internalcutelements, internalpenelements) = res[1]
+        (remainingcutelements, remainingpenelements) = res[2]
+        elementgroups.append((outercutelements, outercutelementsdir, internalcutelements, internalpenelements))
+        lcutelements, lpenelements = remainingcutelements, remainingpenelements
+        gapverbose = False
+
+        if options.verbose:
+            print("  Component: %d outercuts % innercuts, pen-elements %d." % (len(outercutelements), len(internalcutelements), len(internalpenelements)))
+        
+    dxfoutputblocks(options.outputfilename, elementgroups, options.reflectY)
+    
+    
