@@ -253,10 +253,10 @@ def addelementstoblockReflY(block, offset, layer, elements, elementsdir=None):
 
             
 import os
-def dxfoutputblocks(outputfilename, elementgroups, breflY=False):
+def dxfoutputblocks(outputfilename, elementgroups, breflY=False, dxfversion="R12"):
     blockbasename = os.path.splitext(os.path.split(outputfilename)[1])[0]
 
-    doc = ezdxf.new('R12')
+    doc = ezdxf.new(dxfversion)
     aamacutlayer = doc.layers.new("1", {"color":1})
     aamadrawlayer = doc.layers.new("8", {"color":4})
     aamaintcutlayer = doc.layers.new("11", {"color":3})
@@ -300,12 +300,15 @@ if __name__ == "__main__":
     parser.add_option("-p", "--pen-layer", action="append", dest="penlayers", help="Pen layer name", metavar="LAYERNAME")
     parser.add_option("-d", "--distance-max", type="float", dest="dmax", default=0.5, help="output DXF file", metavar="FLOAT")
     parser.add_option("-y", "--reflect-y", action="store_true", dest="reflectY", default=False, help="reflect in Y-axis")
+    dxfchoices = ezdxf.document.const.versions_supported_by_new+list(ezdxf.document.const.acad_release_to_dxf_version.keys())
+    parser.add_option("-x", "--dxf-version", dest="dxfversion", default="R12", choices=dxfchoices)
     parser.add_option("-q", "--quiet", action="store_false", dest="verbose", default=True, help="don't print debug messages")
     (options, args) = parser.parse_args()
     if not options.inputfilename or not options.outputfilename or not options.cutlayers:
         parser.print_help()
         sys.exit(0)
 
+        ezdxf.document.const.versions_supported_by_new
     
     d = ezdxf.readfile(options.inputfilename)
 
@@ -344,7 +347,7 @@ if __name__ == "__main__":
         gapverbose = False
 
         if options.verbose:
-            print("  Component: %d outercuts % innercuts, pen-elements %d." % (len(outercutelements), len(internalcutelements), len(internalpenelements)))
+            print("  Component: %d outercuts %d innercuts, pen-elements %d." % (len(outercutelements), len(internalcutelements), len(internalpenelements)))
         
     dxfoutputblocks(options.outputfilename, elementgroups, options.reflectY)
     
