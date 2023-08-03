@@ -80,7 +80,7 @@ def ultimatesuccessor(mv):
 def makemergevertset(cutelements, dmax):
     mergeverts = [ ]
     for e in cutelements:
-            mergeverts.extend(MergeVertBiway(e))
+        mergeverts.extend(MergeVertBiway(e))
     mergeverts.sort(key=lambda X: X.pt.x)
 
     mvdists = [ ]
@@ -102,8 +102,8 @@ def makemergevertset(cutelements, dmax):
         mv0 = ultimatesuccessor(mvdists[i][1])
         mv1 = ultimatesuccessor(mvdists[i][2])
         if mv0 != mv1:
-            if mv1 in [ me.mvfar  for me in mv0.mergeedges ]:
-                print("suppressing loop making merge")
+            if mv1 in [ ultimatesuccessor(me.mvfar)  for me in mv0.mergeedges ]:
+                print("suppressing loop making merge1")
             else:
                 mv0.mergein(mv1)
                 smergeverts.remove(mv1)
@@ -118,13 +118,14 @@ def makemergevertset(cutelements, dmax):
 
 
 def findcutelementsouter(cutelements, dmax):
-    smergeverts = makemergevertset(cutelements, 0.999)
+    smergeverts = makemergevertset(cutelements, dmax)
 
     mvTL = min(smergeverts, key=lambda X: X.pt.x-X.pt.y)
     meTL = max(mvTL.mergeedges, key=lambda X: (X.angout+360-135)%360)
 
     cutelementsouter = [ meTL.e ]
     cutelementsouterdir = [ meTL.bfore ]
+    cutelementspts = [ meTL.pts ]
     me = meTL
     mv = me.umvfar()
     while mv != mvTL:
@@ -133,7 +134,15 @@ def findcutelementsouter(cutelements, dmax):
         me = mv.mergeedges[iout]
         cutelementsouter.append(me.e)
         cutelementsouterdir.append(me.bfore)
+        cutelementspts.append(me.pts)
         mv = me.umvfar()
+        assert len(cutelementsouter) < 4*len(cutelements), "Infinite loop aborted"
+    cpt0 = cutelementspts[0][0 if cutelementsouterdir[0] else -1]
+    cpt1 = cutelementspts[-1][-1 if cutelementsouterdir[-1] else 0]
+    if (cpt0 - cpt1).magnitude > dmax:
+        # this never happens as it always follows around back to the starting point
+        # creating a zero area polygon
+        print("*** Warning, contour gap between", cpt0, "and", cpt1)
     return cutelementsouter, cutelementsouterdir
 
 def cutcontouraspoly(cutelementsouter, cutelementsouterdir):
@@ -252,17 +261,10 @@ def addelementstoblockReflY(block, offset, layer, elements, elementsdir=None):
 
             
 import os
-def dxfoutputblocks(outputfilename, elementgroups, breflY=False):
-    blockbasename = os.path.splitext(os.path.split(outputfilename)[1])[0]
-
-    doc = ezdxf.new('R12')
-    aamacutlayer = doc.layers.new("1", {"color":1})
-    aamadrawlayer = doc.layers.new("8", {"color":4})
-    aamaintcutlayer = doc.layers.new("11", {"color":3})
-
+def dxfoutputblocksP(doc, blockbasename, elementgroups, aamacutlayer, aamadrawlayer, aamaintcutlayer, breflY=False, shiftx=0, shifty=0):
     for i, elementgroup in enumerate(elementgroups):
         (outercutelements, outercutelementsdir, internalcutelements, internalpenelements) = elementgroup
-        blockname = blockbasename+str(i)
+        blockname = blockbasename+str(i)  # could make this Left-Right
         block = doc.blocks.new(name=blockname)
 
         ptsseq = cutcontouraspoly(outercutelements, outercutelementsdir)
@@ -270,7 +272,7 @@ def dxfoutputblocks(outputfilename, elementgroups, breflY=False):
         if breflY:
             ptsseq = [ reflvecY(pt)  for pt in ptsseq ]
         contourcentre = ezdxf.math.Vec3((min(p.x  for p in ptsseq) + max(p.x  for p in ptsseq))/2, 
-                                                 (min(p.y  for p in ptsseq) + max(p.y  for p in ptsseq))/2, 0)
+                                        (min(p.y  for p in ptsseq) + max(p.y  for p in ptsseq))/2, 0)
         cptsseq = [ pt - contourcentre  for pt in ptsseq ]
         block.add_polyline2d(cptsseq, dxfattribs={ "layer":aamacutlayer.dxf.name })
         #addelementstoblock(block, aamacutlayer, outercutelements, outercutelementsdir)
@@ -284,7 +286,21 @@ def dxfoutputblocks(outputfilename, elementgroups, breflY=False):
 
         msp = doc.modelspace()
         dxfattribs = {'rotation': 0, 'linetype':'BYLAYER' }
-        k = msp.add_blockref(blockname, contourcentre, dxfattribs=dxfattribs)
+        k = msp.add_blockref(blockname, contourcentre+ezdxf.math.Vec3(shiftx, shifty, 0), dxfattribs=dxfattribs)
         
+
+def dxfoutputblocks(outputfilename, elementgroups, baddreflY=False, shiftreflx=0, shiftrefly=0):
+    blockbasename = os.path.splitext(os.path.split(outputfilename)[1])[0]
+    doc = ezdxf.new('R12')
+    aamacutlayer = doc.layers.new("1", {"color":1})
+    aamadrawlayer = doc.layers.new("8", {"color":4})
+    aamaintcutlayer = doc.layers.new("11", {"color":3})
+    dxfoutputblocksP(doc, blockbasename, elementgroups, 
+                     aamacutlayer, aamadrawlayer, aamaintcutlayer, 
+                     breflY=False, shiftx=0, shifty=0)
+    if baddreflY:
+        dxfoutputblocksP(doc, blockbasename+"R", elementgroups, 
+                     aamacutlayer, aamadrawlayer, aamaintcutlayer, 
+                     breflY=baddreflY, shiftx=shiftreflx, shifty=shiftrefly)
     doc.set_modelspace_vport(height=2300, center=(1800, 900))
     doc.saveas(outputfilename)
